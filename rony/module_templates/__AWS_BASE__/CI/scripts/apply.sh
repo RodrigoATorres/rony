@@ -11,7 +11,7 @@ cd infrastructure/aws/
 (iamlive --output-file './policy.json' > /dev/null &)
 
 terraform init
-terraform workspace select $1
+terraform workspace select $1 || terraform workspace new $1
 terraform apply $2
 
 pkill iamlive
@@ -20,7 +20,7 @@ sleep 1
 echo ""
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
-echo "${GREEN}PERMISSIONS USED:${NC}"
+echo -e "${GREEN}PERMISSIONS USED:${NC}"
 cat ./policy.json
 
 cd ../..

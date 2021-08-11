@@ -2,15 +2,15 @@ name: Test and Lint
 
 on:
   push:
-    branches: [main, master, dev, production]
+    branches: [main, master, dev, staging]
   pull_request:
-    branches: [main, master, dev, production]
+    branches: [main, master, dev, staging]
 
 jobs:
   validate_terraform:
     name: Validate Terraform
     runs-on: ubuntu-latest
-    container: ratorres7/rony-ci-test:latest
+    container: ronya3data/rony-ci:0.0.1-terraform1.0.3
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -19,7 +19,7 @@ jobs:
   test_and_lint:
     name: Test and Lint
     runs-on: ubuntu-latest
-    container: ratorres7/rony-ci-test:latest
+    container: ronya3data/rony-ci:0.0.1-terraform1.0.3
     steps:
       - uses: actions/checkout@v2
       - run: |

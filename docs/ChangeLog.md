@@ -1,16 +1,15 @@
 # Change Log
 
-## Version 0.2.1 (dev)
+## Version 0.3.0
 
 - Added CI workflows module for Gitlab and Github
 - Added support for new provider - GCP
   - Modules:
     - \_\_GCP_BASE__
     - Bigquery
-    - Cloud Composer
     - Cloud Functions
     - Cloud Storage
-    - Dataflow
+    - PubSub
 - Added new modules to AWS provider
   - Glue Crawler
   - Glue Job
@@ -18,7 +17,9 @@
   - Lambda
 - Added -y/--autoconfirm flag to new command, in order to skip user inputs
 - Added CI scripts to run all the testing, linting and validation scripts on every module
+  - Added jobs to test package installation on windows
 - Added docker-compose to run rony CI jobs locally
+- Added add-provider function
 - ReadTheDocs
   - Added ReadTheDocs documentation
 - Bugfixes
