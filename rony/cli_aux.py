@@ -1,12 +1,63 @@
 import importlib
 import pkgutil
 import click
+from packaging import version
 
 plugins = [
     importlib.import_module(name)
     for finder, name, ispkg in pkgutil.iter_modules()
     if name.startswith("rony_")
 ]
+
+
+def comp_modules_version(info1, info2):
+    v1 = version.parse(info1.get("version", "0.0.0"))
+    v2 = version.parse(info2.get("version", "0.0.0"))
+    return v1 < v2
+
+
+MODULES = {}
+for finder, name, ispkg in pkgutil.iter_modules():
+    if name.startswith("rony_modules"):
+        for tmp_module in importlib.import_module(name).modules_list:
+            if (tmp_module.module_name in MODULES.keys()) and comp_modules_version(
+                tmp_module.version, MODULES[tmp_module.module_name].version
+            ):
+                continue
+            else:
+                MODULES[tmp_module.module_name] = tmp_module
+
+
+def modules_autocomplete(ctx, args, incomplete):
+    """Get list of modules available for installation
+
+    Args:
+        ctx:
+        args:
+        incomplete:
+    """
+
+    return [
+        (module.module_name, module.module_desc)
+        for module in MODULES.values()
+        if (incomplete in module.module_name) and module.module_name[:2] != "__"
+    ]
+
+
+def write_module(
+    LOCAL_PATH,
+    module_name,
+    autoconfirm=False,
+    custom_inputs={},
+):
+    """Copy files to project
+
+    Args:
+        LOCAL_PATH (str): Local Path
+        project_name (str): Project Name
+    """
+
+    MODULES[module_name](LOCAL_PATH, autoconfirm, custom_inputs)
 
 
 def get_cli_decorators(command):
@@ -37,18 +88,18 @@ def get_modules_to_add(command, opts, ctx):
 
     if command == "new":
         if opts["excludeci"] == False:
-            all_modules += ["CI_workflows"] 
+            all_modules += ["CI_workflows"]
 
         if opts["provider"] == "aws":
 
-            all_modules += [ "__AWS_BASE__"]
+            all_modules += ["__AWS_BASE__"]
 
             if opts["autoconfirm"]:
                 all_modules += [
                     "aws_simple_storage_service",
                     "aws_glue_crawler",
                     "aws_lambda_function",
-                    "aws_kinesis_stream"
+                    "aws_kinesis_stream",
                 ]
             else:
                 if click.confirm("Add S3 module?", default=True):
@@ -61,7 +112,7 @@ def get_modules_to_add(command, opts, ctx):
                     all_modules.append("aws_kinesis_stream")
 
         if opts["provider"] == "gcp":
-            
+
             all_modules += ["__GCP_BASE__"]
 
             if opts["autoconfirm"]:

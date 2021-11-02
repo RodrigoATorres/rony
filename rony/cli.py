@@ -1,9 +1,16 @@
 import click
 import os
 from .validation import get_operational_system, check_version_python, check_python_compile
-from .module_writer import modules_autocomplete, write_module, create_module_from_diff
-from .cli_aux import get_modules_to_add, get_cli_decorators, get_autocomplete
+from .module_writer import create_module_from_diff
+from .cli_aux import (
+    get_modules_to_add,
+    get_cli_decorators,
+    get_autocomplete,
+    modules_autocomplete,
+    write_module,
+)
 from .__init__ import __version__ as version
+import rony_modules
 
 from datetime import datetime
 
@@ -33,6 +40,7 @@ def info():
     Checks that Rony is correctly installed
     """
     click.echo(logo)
+    print(dir(rony_modules.__all__))
 
 
 @cli.command()

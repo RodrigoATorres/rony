@@ -1,202 +1,162 @@
 import click
 import os
-from packaging import version
-from datetime import datetime
 import json
 from jinja2 import Template
-import rony
-
-import importlib
-import pkgutil
 import subprocess
 from unidiff import PatchSet
 
-plugins_dirs = [
-    importlib.import_module(name).__path__[0]
-    for finder, name, ispkg in pkgutil.iter_modules()
-    if name.startswith("rony_")
-]
 
-EXCLUDE_DIRS = ["__pycache__"]
+class RonyModule:
 
-
-def get_modules():
-    def get_module_info(module_name, parent_dir):
-        config_file = os.path.join(parent_dir, f"{module_name}.json")
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                data = json.load(f)
-            return data
-        else:
-            return {}
-
-    def comp_modules_version(info1, info2):
-        v1 = version.parse(info1.get("version", "0.0.0"))
-        v2 = version.parse(info2.get("version", "0.0.0"))
-        return v1 < v2
-
-    parent_dirs = [rony.__path__[0]] + plugins_dirs
-    modules_dirs = [os.path.join(parent, "module_templates") for parent in parent_dirs]
-    if os.path.exists(os.path.join(os.path.expanduser("~"), "MyRonyModules")):
-        modules_dirs += [os.path.join(os.path.expanduser("~"), "MyRonyModules")]
-
-    module_paths = {}
-    module_info = {}
-    module_desc = {}
-
-    for modules_dir in reversed(modules_dirs):
-        for module_name in next(os.walk(modules_dir))[1]:
-
-            tmp_info = get_module_info(module_name, modules_dir)
-            if (module_name in module_paths.keys()) and comp_modules_version(
-                tmp_info, module_info[module_name]
-            ):
-                continue
-            else:
-                module_paths[module_name] = os.path.join(modules_dir, module_name)
-                module_info[module_name] = tmp_info
-                module_desc[module_name] = tmp_info.get("info", "")
-
-    return module_paths, module_desc
-
-
-def modules_autocomplete(ctx, args, incomplete):
-    """Get list of modules available for installation
-
-    Args:
-        ctx:
-        args:
-        incomplete:
+    module_name = "CHANGEME"
+    module_desc = "Module Description"
+    module_version = "0.0.1"
+    developers = ["rony@a3data.com.br"]
+    instructions = """
+    Intructions test
     """
+    exclude_dirs = ["__pycache__"]
+    exclude_filenames = [".ronyignore"]
+    exclude_filepaths = []
 
-    _, module_desc = get_modules()
-    return [
-        (key, module_desc[key])
-        for key in module_desc.keys()
-        if (incomplete in key) and key[:2] != "__"
-    ]
+    def __init__(
+        self, local_path: str, autoconfirm: bool = False, info: dict = {}
+    ) -> None:
 
+        #
+        self.local_path = local_path
+        self.autoconfirm = autoconfirm
+        self.info = info
 
-def write_module(
-    LOCAL_PATH,
-    module_name,
-    autoconfirm=False,
-    custom_inputs={},
-):
-    """Copy files to project
+        #
+        self.get_module_inputs()
+        self.add_module()
 
-    Args:
-        LOCAL_PATH (str): Local Path
-        project_name (str): Project Name
-    """
+    def add_module(self):
 
-    def get_inputs(input_info, autoconfirm=False):
-        input_data = {}
-        for info in input_info:
-            if autoconfirm:
-                input_data[info[0]] = info[1]
-            else:
-                input_data[info[0]] = click.prompt(info[2], default=info[1])
-        return input_data
+        self.get_files_to_add()
+        self.custom_file_manipulation()
+        self.apply()
 
-    module_paths, _ = get_modules()
-    module_path = module_paths[module_name]
-    config_file = os.path.join(os.path.dirname(module_path), f"{module_name}.json")
+    def get_module_inputs(self):
 
-    # Load config file
-    if os.path.exists(config_file):
-        with open(config_file, "r") as f:
-            data = json.load(f)
-    else:
-        data = {"input_info": []}
+        self.user_inputs = {}
 
-    # Request input data
-    data["inputs"] = get_inputs(data["input_info"], autoconfirm)
-    data["inputs"].update(custom_inputs)
+    def get_files_to_add(self) -> None:
+        """[summary]
 
-    # Process files
-    files_to_create = {}
-    files_to_append = {}
-    dirs_to_create = []
+        Returns:
+            [type]: [description]
+        """
 
-    for dir_path, dirs, files in os.walk(module_path):
+        self.files_to_add = {}
+        self.dirs_to_create = []
 
-        dir_name = os.path.basename(dir_path)
-        rel_path = os.path.relpath(dir_path, module_path)
-        local_dir_path = os.path.join(LOCAL_PATH, rel_path)
+        for dir_path, dirs, files in os.walk(self.module_dir):
 
-        if dir_name in EXCLUDE_DIRS:
-            continue
+            dir_name = os.path.basename(dir_path)
+            rel_path = os.path.relpath(dir_path, self.module_dir)
+            local_dir_path = os.path.join(self.local_path, rel_path)
 
-        for d in dirs:
-            if d in EXCLUDE_DIRS:
-                continue
-            local_d_path = os.path.join(local_dir_path, d)
-            if not os.path.exists(local_d_path):
-                dirs_to_create.append(local_d_path)
-
-        for f in files:
-
-            if f == ".ronyignore":
+            if dir_name in self.exclude_dirs:
                 continue
 
-            outputText = open(os.path.join(dir_path, f), "r", encoding="latin-1").read()
+            for d in dirs:
+                if d in self.exclude_dirs:
+                    continue
+                local_d_path = os.path.join(local_dir_path, d)
+                if not os.path.exists(local_d_path):
+                    self.dirs_to_create.append(os.path.join(rel_path, d))
 
-            if ".tpl." in f:
-                template = Template(outputText)
-                outputText = template.render(**data)
+            for f in files:
 
-            local_f_path = os.path.join(local_dir_path, f.replace(".tpl.", "."))
-            if os.path.exists(local_f_path):
-                files_to_append[local_f_path] = outputText
-            else:
-                files_to_create[local_f_path] = outputText
+                if f in self.exclude_filenames:
+                    continue
 
-    # Show changes to user and ask for permission
+                if os.path.join(rel_path, f) in self.exclude_filepaths:
+                    continue
 
-    if not autoconfirm:
-        click.secho("DIRECTORIES TO BE CREATED:", fg="green", bold=True)
-        for key in dirs_to_create:
-            click.secho(key, fg="green")
+                outputText = open(
+                    os.path.join(dir_path, f), "r", encoding="latin-1"
+                ).read()
 
-        click.secho("FILES TO BE CREATED:", fg="green", bold=True)
+                if ".tpl." in f:
+                    template = Template(outputText)
+                    outputText = template.render(
+                        info=self.info, user_inputs=self.user_inputs
+                    )
+
+                rel_f_path = os.path.join(rel_path, f.replace(".tpl.", "."))
+                self.files_to_add[rel_f_path] = outputText
+
+    def custom_file_manipulation(self) -> None:
+        pass
+
+    def apply(self) -> None:
+
+        """"""
+
+        dirs_to_create = [
+            os.path.join(self.local_path, tmp) for tmp in self.dirs_to_create
+        ]
+
+        files_to_create = {
+            os.path.join(self.local_path, key): text
+            for key, text in self.files_to_add.items()
+            if not os.path.exists(os.path.join(self.local_path, key))
+        }
+
+        files_to_append = {
+            os.path.join(self.local_path, key): text
+            for key, text in self.files_to_add.items()
+            if os.path.exists(os.path.join(self.local_path, key))
+        }
+
+        if not self.autoconfirm:
+
+            click.secho("DIRECTORIES TO BE CREATED:", fg="green", bold=True)
+            for key in dirs_to_create:
+                click.secho(key, fg="green")
+
+            click.secho("FILES TO BE CREATED:", fg="green", bold=True)
+            for key, text in files_to_create.items():
+                click.secho(key, fg="green")
+
+            click.secho("FILES TO BE APPENDED:", fg="yellow", bold=True)
+            for key, text in files_to_append.items():
+                click.secho(key, fg="yellow")
+                click.secho("\t+  ".join(("\n" + text).splitlines(True)) + "\n")
+
+        if (not self.autoconfirm) and (
+            not click.confirm("Do you want to continue?", default=True, abort=True)
+        ):
+            return
+
+            # Print instructions
+        if not self.autoconfirm:
+            click.secho("INSTRUCTIONS", fg="green", bold=True)
+            click.secho(self.instructions)
+            click.secho("DEVELOPED BY:", fg="green", bold=True)
+            click.secho(
+                ", ".join(self.developers),
+            )
+
+        # Create and append files and dirs
+
+        for directory in dirs_to_create:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
         for key, text in files_to_create.items():
-            click.secho(key, fg="green")
-            click.secho("\t+  ".join(("\n" + text).splitlines(True)) + "\n")
+            directory = os.path.dirname(key)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            with open(key, "wb") as f:
+                f.write(text.encode("latin-1"))
 
-        click.secho("FILES TO BE APPENDED:", fg="yellow", bold=True)
         for key, text in files_to_append.items():
-            click.secho(key, fg="yellow")
-            click.secho("\t+  ".join(("\n" + text).splitlines(True)) + "\n")
-
-    if (not autoconfirm) and (
-        not click.confirm("Do you want to continue?", default=True, abort=True)
-    ):
-        return
-
-    # Print instructions
-    if not autoconfirm:
-        click.secho("INSTRUCTIONS", fg="green", bold=True)
-        click.secho("\n".join(data.get("instructions", [])))
-        click.secho("DEVELOPED BY:", fg="green", bold=True)
-        click.secho(", ".join(data.get("developers", [])))
-
-    # Create and append files and dirs
-
-    for directory in dirs_to_create:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-    for key, text in files_to_create.items():
-        directory = os.path.dirname(key)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        with open(key, "wb") as f:
-            f.write(text.encode("latin-1"))
-
-    for key, text in files_to_append.items():
-        with open(key, "ab") as f:
-            f.write(("\n\n" + text).encode("latin-1"))
+            with open(key, "ab") as f:
+                f.write(("\n\n" + text).encode("latin-1"))
 
 
 def create_module_from_diff(module_name):
